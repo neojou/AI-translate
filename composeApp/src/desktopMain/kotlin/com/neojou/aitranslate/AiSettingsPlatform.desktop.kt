@@ -1,24 +1,10 @@
 package com.neojou.aitranslate
 
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.suspendCancellableCoroutine
-import java.net.URI
-import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
-import java.util.concurrent.CompletionException
 import java.util.prefs.Preferences
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
-
-private const val TAGS_TIMEOUT_SECONDS: Long = 10
-private const val CHAT_TIMEOUT_MINUTES: Long = 5
-
-private val httpClient: HttpClient = HttpClient.newBuilder()
-    .followRedirects(HttpClient.Redirect.NEVER)
-    .connectTimeout(Duration.ofSeconds(TAGS_TIMEOUT_SECONDS))
-    .build()
 
 private class PreferencesAiSettingsStore : AiSettingsStore {
     private val prefs: Preferences = Preferences.userRoot().node(AI_PREFS_NODE)
@@ -42,7 +28,7 @@ internal actual fun saveAiSettings(settings: AiSettings) {
 }
 
 internal actual suspend fun checkInstalledModel(settings: AiSettings): AiSettingsNotice =
-    executeOllamaCheck(settings, ::send)
+    executeOllamaCheck(settings, ::ollamaSend)
 
 /**
  * Confirms the model is already installed, then loads it with [AiSettings.ollamaNumCtx].
@@ -59,13 +45,13 @@ internal suspend fun executeOllamaCheck(
         is OllamaOrigin.Invalid -> return AiSettingsNotice.Failure(parsed.message)
     }
     val tags = try {
-        sendRequest(request(origin, path = "/api/tags", body = null, Duration.ofSeconds(TAGS_TIMEOUT_SECONDS)))
+        sendRequest(ollamaRequest(origin, path = "/api/tags", body = null, Duration.ofSeconds(OLLAMA_TAGS_TIMEOUT_SECONDS)))
     } catch (error: CancellationException) {
         throw error
     } catch (error: Exception) {
         return AiSettingsNotice.Failure(error.message ?: "Ollama is not reachable.")
     }
-    if (tags.statusCode() !in 200..299) return AiSettingsNotice.Failure(httpFailure(tags))
+    if (tags.statusCode() !in 200..299) return AiSettingsNotice.Failure(ollamaHttpFailure(tags))
     if (!modelInstalled(ollamaModelNames(tags.body()), settings.ollamaModel)) {
         return AiSettingsNotice.Failure("Model \"${settings.ollamaModel}\" is not installed.")
     }
@@ -84,11 +70,11 @@ private suspend fun postChat(
 ): AiSettingsNotice {
     val response = try {
         sendRequest(
-            request(
+            ollamaRequest(
                 origin,
                 path = "/api/chat",
                 body = ollamaChatBody(settings.ollamaModel, settings.ollamaNumCtx, includeThink),
-                Duration.ofMinutes(CHAT_TIMEOUT_MINUTES),
+                Duration.ofMinutes(OLLAMA_CHAT_TIMEOUT_MINUTES),
             ),
         )
     } catch (error: CancellationException) {
@@ -96,42 +82,6 @@ private suspend fun postChat(
     } catch (error: Exception) {
         return AiSettingsNotice.Failure(error.message ?: "Ollama is not reachable.")
     }
-    if (response.statusCode() !in 200..299) return AiSettingsNotice.Failure(httpFailure(response))
+    if (response.statusCode() !in 200..299) return AiSettingsNotice.Failure(ollamaHttpFailure(response))
     return AiSettingsNotice.Success(AI_CHECK_LOADED)
-}
-
-private fun request(origin: String, path: String, body: String?, timeout: Duration): HttpRequest {
-    val builder = HttpRequest.newBuilder(URI.create(origin + path)).timeout(timeout)
-    return if (body == null) {
-        builder.GET().build()
-    } else {
-        builder
-            .header("Content-Type", "application/json; charset=utf-8")
-            .POST(HttpRequest.BodyPublishers.ofString(body))
-            .build()
-    }
-}
-
-private suspend fun send(request: HttpRequest): HttpResponse<String> =
-    suspendCancellableCoroutine { continuation ->
-        val future = httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-        future.whenComplete { response, error ->
-            if (continuation.isCancelled) return@whenComplete
-            if (error != null) {
-                val cause = (error as? CompletionException)?.cause ?: error
-                continuation.resumeWithException(cause)
-            } else {
-                continuation.resume(response)
-            }
-        }
-        continuation.invokeOnCancellation { future.cancel(true) }
-    }
-
-private fun httpFailure(response: HttpResponse<String>): String {
-    val snippet = response.body().trim().take(500)
-    return if (snippet.isEmpty()) {
-        "Ollama HTTP ${response.statusCode()}"
-    } else {
-        "Ollama HTTP ${response.statusCode()}: $snippet"
-    }
 }

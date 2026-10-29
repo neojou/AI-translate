@@ -30,7 +30,7 @@ fun main() {
         }
 
         val windowState = rememberWindowState(
-            size = DpSize(960.dp, 640.dp),
+            size = DpSize(1180.dp, 760.dp),
         )
         Window(
             onCloseRequest = ::exitApplication,

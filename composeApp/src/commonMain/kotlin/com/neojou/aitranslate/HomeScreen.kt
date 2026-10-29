@@ -3,18 +3,15 @@ package com.neojou.aitranslate
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,82 +22,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import com.neojou.tools.LogLevel
-import com.neojou.tools.MyLog
-import com.neojou.tools.ui.menu.MyTopMenuBar
-import com.neojou.tools.ui.menu.MyTopMenuItem
-
-/**
- * Log tag used by [HomeScreen] for logging UI events.
- */
-private const val TAG = "Home"
-
-/**
- * Main content modes for the shell area below the toolbar.
- */
-private enum class MainContent {
-    /** Default placeholder until a feature is chosen. */
-    Home,
-
-    /** Daily candlestick + volume chart (viewport pan/zoom). */
-    KChart,
-}
 
 /**
  * Primary application shell.
  *
- * Hosts a product-configured [MyTopMenuBar] and content area.
- * About opens the shared about dialog. On Desktop, Settings → AI Settings opens
- * the local model dialog. Wasm does not show Settings.
+ * The desk is shared. About opens the shared about dialog.
+ * On Desktop, Settings → AI Settings opens the local model dialog. Wasm does not show Settings.
  */
 @Composable
 fun HomeScreen(about: AboutRequest) {
     var aiSettingsOpen by remember { mutableStateOf(false) }
-    // Product-specific menu tree only; [MyTopMenuBar] stays app-agnostic.
-    // Rebuilt each composition so callbacks always see current shell state.
-    val topMenus = buildList {
-        add(
-            MyTopMenuItem(
-                id = "about",
-                label = "About",
-                onClick = about::show,
-            ),
-        )
-        if (aiSettingsAvailable()) {
-            add(
-                MyTopMenuItem(
-                    id = "settings",
-                    label = "Settings",
-                    children = listOf(
-                        MyTopMenuItem(
-                            id = "ai-settings",
-                            label = "AI Settings",
-                            onClick = { aiSettingsOpen = true },
-                        ),
-                    ),
-                ),
-            )
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        MyLog.add(TAG, "Enter", LogLevel.DEBUG)
-    }
-
-    Scaffold(
-        topBar = {
-            MyTopMenuBar(items = topMenus)
+    TranslateScreen(
+        onAbout = about::show,
+        onOpenAiSettings = if (aiSettingsAvailable()) {
+            { aiSettingsOpen = true }
+        } else {
+            null
         },
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(AppVersion.APP_NAME)
-        }
-    }
+    )
     if (aiSettingsOpen) {
         AiSettingsDialog(onDismiss = { aiSettingsOpen = false })
     }

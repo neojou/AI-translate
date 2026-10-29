@@ -119,6 +119,9 @@ bin/
 # Kotlin/JS store (KMP wasm)
 kotlin-js-store/wasm/yarn.lock
 
+# Per-passage translation logs. The standing command in AI-commands/translate.md stays.
+/AI-commands/runs/
+
 # Gradle tooling
 gradle-app.setting
 .gradletasknamecache

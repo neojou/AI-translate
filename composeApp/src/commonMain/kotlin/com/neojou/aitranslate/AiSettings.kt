@@ -255,7 +255,7 @@ private fun hex4(code: Int): String {
     }
 }
 
-private fun jsonQuote(value: String): String = buildString {
+internal fun jsonQuote(value: String): String = buildString {
     append('"')
     for (ch in value) {
         when (ch) {
@@ -268,6 +268,55 @@ private fun jsonQuote(value: String): String = buildString {
         }
     }
     append('"')
+}
+
+/**
+ * Value of the first `"key": "..."` string in [json].
+ * A key mentioned inside another string does not count unless it is followed by a colon.
+ * Returns null when the key is missing or the string is cut off.
+ */
+internal fun jsonStringField(json: String, key: String): String? {
+    val needle = "\"$key\""
+    var searchFrom = 0
+    while (searchFrom < json.length) {
+        val found = json.indexOf(needle, searchFrom)
+        if (found < 0) return null
+        var index = found + needle.length
+        while (index < json.length && json[index].isWhitespace()) index++
+        if (index < json.length && json[index] == ':') {
+            index++
+            while (index < json.length && json[index].isWhitespace()) index++
+            if (index < json.length && json[index] == '"') {
+                return readJsonString(json, index)
+            }
+        }
+        searchFrom = found + needle.length
+    }
+    return null
+}
+
+private fun readJsonString(json: String, quoteIndex: Int): String? {
+    val raw = StringBuilder()
+    var index = quoteIndex + 1
+    while (index < json.length) {
+        val ch = json[index]
+        if (ch == '"') return jsonUnescape(raw.toString())
+        if (ch == '\\') {
+            if (index + 1 >= json.length) return null
+            raw.append(ch).append(json[index + 1])
+            if (json[index + 1] == 'u') {
+                if (index + 5 >= json.length) return null
+                raw.append(json.substring(index + 2, index + 6))
+                index += 6
+                continue
+            }
+            index += 2
+            continue
+        }
+        raw.append(ch)
+        index++
+    }
+    return null
 }
 
 private fun jsonUnescape(value: String): String = buildString {
